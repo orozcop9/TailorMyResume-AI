@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +10,12 @@ import { Progress } from "@/components/ui/progress";
 import { Eye, EyeOff, Mail } from "lucide-react";
 import { OnboardingSteps } from "./OnboardingSteps";
 import { getStripe } from "@/lib/stripe";
-import { formatCardNumber, formatExpiryDate, validateCardNumber, validateExpiryDate, validateCVV } from "@/lib/payment";
+import {
+  Elements,
+  PaymentElement,
+  useStripe,
+  useElements,
+} from "@stripe/react-stripe-js";
 
 interface FormData {
   firstName: string;
@@ -19,9 +24,49 @@ interface FormData {
   password: string;
   confirmPassword: string;
   selectedPlan: string;
-  cardNumber: string;
-  expiryDate: string;
-  cvv: string;
+}
+
+function PaymentForm({ clientSecret, onSuccess }: { clientSecret: string; onSuccess: () => void }) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [error, setError] = useState("");
+  const [processing, setProcessing] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stripe || !elements) return;
+
+    setProcessing(true);
+    setError("");
+
+    const { error: submitError } = await stripe.confirmPayment({
+      elements,
+      confirmParams: {
+        return_url: `${window.location.origin}/onboarding/success`,
+      },
+    });
+
+    if (submitError) {
+      setError(submitError.message || "Payment failed");
+      setProcessing(false);
+    } else {
+      onSuccess();
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <PaymentElement />
+      {error && <p className="text-sm text-red-500 mt-2">{error}</p>}
+      <Button 
+        type="submit"
+        disabled={!stripe || processing}
+        className="w-full mt-6"
+      >
+        {processing ? "Processing..." : "Complete Sign Up"}
+      </Button>
+    </form>
+  );
 }
 
 export function OnboardingForm() {
@@ -32,8 +77,7 @@ export function OnboardingForm() {
   const [passwordError, setPasswordError] = useState("");
   const [confirmPasswordError, setConfirmPasswordError] = useState("");
   const [passwordStrength, setPasswordStrength] = useState(0);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [paymentError, setPaymentError] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
   const [formData, setFormData] = useState<FormData>({
     firstName: "",
     lastName: "",
@@ -41,9 +85,6 @@ export function OnboardingForm() {
     password: "",
     confirmPassword: "",
     selectedPlan: "pro",
-    cardNumber: "",
-    expiryDate: "",
-    cvv: ""
   });
 
   const plans = [
@@ -67,6 +108,12 @@ export function OnboardingForm() {
       description: "For teams and organizations"
     }
   ];
+
+  useEffect(() => {
+    if (step === 3 && formData.selectedPlan !== "free") {
+      createPaymentIntent();
+    }
+  }, [step, formData.selectedPlan]);
 
   const calculatePasswordStrength = (password: string): number => {
     let strength = 0;
@@ -122,15 +169,8 @@ export function OnboardingForm() {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    let formattedValue = value;
-
-    if (name === "cardNumber") {
-      formattedValue = formatCardNumber(value);
-    } else if (name === "expiryDate") {
-      formattedValue = formatExpiryDate(value);
-    }
-
-    setFormData((prev) => ({ ...prev, [name]: formattedValue }));
+    
+    setFormData((prev) => ({ ...prev, [name]: value }));
     
     if (name === "password") {
       setPasswordError(validatePassword(value));
@@ -143,26 +183,6 @@ export function OnboardingForm() {
     if (name === "confirmPassword") {
       setConfirmPasswordError(validateConfirmPassword(value));
     }
-  };
-
-  const validatePaymentFields = () => {
-    if (formData.selectedPlan === "free") {
-      return true;
-    }
-    
-    if (!validateCardNumber(formData.cardNumber)) {
-      setPaymentError("Invalid card number");
-      return false;
-    }
-    if (!validateExpiryDate(formData.expiryDate)) {
-      setPaymentError("Invalid expiry date");
-      return false;
-    }
-    if (!validateCVV(formData.cvv)) {
-      setPaymentError("Invalid CVV");
-      return false;
-    }
-    return true;
   };
 
   const createPaymentIntent = async () => {
@@ -182,63 +202,22 @@ export function OnboardingForm() {
       }
 
       const data = await response.json();
-      return data.clientSecret;
+      if (data.clientSecret) {
+        setClientSecret(data.clientSecret);
+      }
     } catch (error) {
       console.error("Payment intent error:", error);
-      throw error;
     }
   };
 
-  const handleNextStep = async () => {
+  const handleNextStep = () => {
     if (step < 3) {
       setStep(step + 1);
-    } else {
-      if (!validatePaymentFields()) {
-        return;
-      }
-
-      setIsProcessing(true);
-      setPaymentError("");
-
-      try {
-        if (formData.selectedPlan !== "free") {
-          const clientSecret = await createPaymentIntent();
-          const stripe = await getStripe();
-          
-          if (!stripe || !clientSecret) {
-            throw new Error("Stripe initialization failed");
-          }
-
-          const { error } = await stripe.confirmPayment({
-            elements: {
-              payment_method: {
-                card: {
-                  number: formData.cardNumber.replace(/\s/g, ""),
-                  exp_month: parseInt(formData.expiryDate.split("/")[0]),
-                  exp_year: parseInt("20" + formData.expiryDate.split("/")[1]),
-                  cvc: formData.cvv,
-                },
-              },
-            },
-            clientSecret,
-            confirmParams: {
-              return_url: `${window.location.origin}/onboarding/success`,
-            },
-          });
-
-          if (error) {
-            throw new Error(error.message);
-          }
-        }
-
-        router.push("/onboarding/success");
-      } catch (error) {
-        console.error("Payment error:", error);
-        setPaymentError(error instanceof Error ? error.message : "Payment failed");
-      } finally {
-        setIsProcessing(false);
-      }
     }
+  };
+
+  const handlePaymentSuccess = () => {
+    router.push("/onboarding/success");
   };
 
   const isStepValid = () => {
@@ -255,16 +234,12 @@ export function OnboardingForm() {
         );
       case 2:
         return formData.selectedPlan;
-      case 3:
-        return formData.selectedPlan === "free" || (
-          formData.cardNumber && 
-          formData.expiryDate && 
-          formData.cvv
-        );
       default:
         return false;
     }
   };
+
+  const stripePromise = getStripe();
 
   return (
     <div className="container max-w-3xl py-10">
@@ -428,62 +403,35 @@ export function OnboardingForm() {
             </RadioGroup>
           )}
 
-          {step === 3 && formData.selectedPlan !== "free" && (
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="cardNumber">Card Number</Label>
-                <Input
-                  id="cardNumber"
-                  name="cardNumber"
-                  value={formData.cardNumber}
-                  onChange={handleInputChange}
-                  placeholder="1234 5678 9012 3456"
-                  maxLength={19}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="expiryDate">Expiry Date</Label>
-                  <Input
-                    id="expiryDate"
-                    name="expiryDate"
-                    value={formData.expiryDate}
-                    onChange={handleInputChange}
-                    placeholder="MM/YY"
-                    maxLength={5}
+          {step === 3 && (
+            <>
+              {formData.selectedPlan === "free" ? (
+                <Button 
+                  onClick={() => router.push("/onboarding/success")}
+                  className="w-full"
+                >
+                  Complete Sign Up
+                </Button>
+              ) : clientSecret && (
+                <Elements stripe={stripePromise} options={{ clientSecret }}>
+                  <PaymentForm 
+                    clientSecret={clientSecret}
+                    onSuccess={handlePaymentSuccess}
                   />
-                </div>
-                <div>
-                  <Label htmlFor="cvv">CVV</Label>
-                  <Input
-                    id="cvv"
-                    name="cvv"
-                    value={formData.cvv}
-                    onChange={handleInputChange}
-                    placeholder="123"
-                    maxLength={4}
-                  />
-                </div>
-              </div>
-              {paymentError && (
-                <p className="text-sm text-red-500">{paymentError}</p>
+                </Elements>
               )}
-            </div>
+            </>
           )}
 
-          <Button 
-            onClick={handleNextStep}
-            disabled={!isStepValid() || isProcessing}
-            className="w-full mt-6"
-          >
-            {isProcessing ? (
-              "Processing..."
-            ) : step === 3 ? (
-              "Complete Sign Up"
-            ) : (
-              "Continue"
-            )}
-          </Button>
+          {step < 3 && (
+            <Button 
+              onClick={handleNextStep}
+              disabled={!isStepValid()}
+              className="w-full mt-6"
+            >
+              Continue
+            </Button>
+          )}
 
           {step === 1 && (
             <p className="text-center text-sm text-muted-foreground mt-4">

@@ -1,37 +1,76 @@
 
-import { Button } from "@/components/ui/button";
+import { useState } from "react";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Menu, X } from "lucide-react";
 
 export function Header() {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  const navigation = [
+    { name: "Home", href: "/" },
+    { name: "Features", href: "/#features" },
+    { name: "Pricing", href: "/pricing" },
+    { name: "Optimize", href: "/optimize" },
+  ];
+
   return (
-    <header className="fixed top-0 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-16 items-center justify-between">
-        <div className="flex items-center gap-8">
-          <Link href="/" className="flex items-center space-x-2">
-            <span className="text-xl font-bold">TailorMyResume</span>
-            <span className="text-sm text-primary">AI</span>
-          </Link>
-          <nav className="hidden md:flex gap-6">
-            <Link href="/features" className="text-sm font-medium hover:text-primary">
-              Features
-            </Link>
-            <Link href="/pricing" className="text-sm font-medium hover:text-primary">
-              Pricing
-            </Link>
-            <Link href="/about" className="text-sm font-medium hover:text-primary">
-              About
-            </Link>
-          </nav>
+    <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-sm border-b">
+      <nav className="container flex items-center justify-between h-16">
+        <Link href="/" className="font-bold text-xl">
+          TailorMyResume
+        </Link>
+
+        <div className="hidden md:flex items-center gap-8">
+          <div className="flex gap-6">
+            {navigation.map((item) => (
+              <Link
+                key={item.name}
+                href={item.href}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {item.name}
+              </Link>
+            ))}
+          </div>
+          <div className="flex items-center gap-4">
+            <Button variant="outline">Sign In</Button>
+            <Button>Get Started</Button>
+          </div>
         </div>
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" asChild>
-            <Link href="/login">Login</Link>
-          </Button>
-          <Button asChild>
-            <Link href="/optimize">Get Started</Link>
-          </Button>
+
+        <button
+          className="md:hidden"
+          onClick={() => setIsMenuOpen(!isMenuOpen)}
+        >
+          {isMenuOpen ? (
+            <X className="h-6 w-6" />
+          ) : (
+            <Menu className="h-6 w-6" />
+          )}
+        </button>
+      </nav>
+
+      {isMenuOpen && (
+        <div className="md:hidden border-b">
+          <div className="container py-4 space-y-4">
+            {navigation.map((item) => (
+              <Link
+                key={item.name}
+                href={item.href}
+                className="block text-muted-foreground hover:text-foreground transition-colors"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                {item.name}
+              </Link>
+            ))}
+            <div className="grid gap-4 pt-4 border-t">
+              <Button variant="outline" className="w-full">Sign In</Button>
+              <Button className="w-full">Get Started</Button>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </header>
   );
 }

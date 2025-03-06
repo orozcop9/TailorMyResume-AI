@@ -3,13 +3,24 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Upload, File, X } from "lucide-react";
 
-export function FileUpload() {
+interface FileUploadProps {
+  onFileSelected: (file: File | null) => void;
+}
+
+export function FileUpload({ onFileSelected }: FileUploadProps) {
   const [file, setFile] = useState<File | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
+      const selectedFile = e.target.files[0];
+      setFile(selectedFile);
+      onFileSelected(selectedFile);
     }
+  };
+
+  const handleRemoveFile = () => {
+    setFile(null);
+    onFileSelected(null);
   };
 
   return (
@@ -43,7 +54,7 @@ export function FileUpload() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setFile(null)}
+            onClick={handleRemoveFile}
           >
             <X className="h-4 w-4" />
           </Button>

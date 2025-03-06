@@ -35,7 +35,9 @@ export function Header() {
           </div>
           <div className="flex items-center gap-4">
             <Button variant="outline">Sign In</Button>
-            <Button>Get Started</Button>
+            <Button asChild>
+              <Link href="/onboarding">Get Started</Link>
+            </Button>
           </div>
         </div>
 
@@ -66,7 +68,9 @@ export function Header() {
             ))}
             <div className="grid gap-4 pt-4 border-t">
               <Button variant="outline" className="w-full">Sign In</Button>
-              <Button className="w-full">Get Started</Button>
+              <Button asChild className="w-full">
+                <Link href="/onboarding">Get Started</Link>
+              </Button>
             </div>
           </div>
         </div>

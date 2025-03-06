@@ -16,7 +16,7 @@ export function Hero() {
             </p>
             <div className="mt-10 flex items-center justify-center">
               <Button size="lg" asChild>
-                <Link href="/optimize">
+                <Link href="/pricing">
                   Optimize Your Resume
                 </Link>
               </Button>

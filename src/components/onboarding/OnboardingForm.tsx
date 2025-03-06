@@ -6,14 +6,17 @@ import { Input } from "@/components/ui/input";
 import { OnboardingSteps } from "@/components/onboarding/OnboardingSteps";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { ArrowRight, CheckCircle2 } from "lucide-react";
+import { ArrowRight, CheckCircle2, Eye, EyeOff } from "lucide-react";
 
 export function OnboardingForm() {
   const [step, setStep] = useState(1);
+  const [showPassword, setShowPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
     email: "",
+    password: "",
     selectedPlan: "pro",
     cardNumber: "",
     expiryDate: "",
@@ -42,9 +45,32 @@ export function OnboardingForm() {
     }
   ];
 
+  const validatePassword = (password: string) => {
+    if (password.length < 8) {
+      return "Password must be at least 8 characters long";
+    }
+    if (!/[A-Z]/.test(password)) {
+      return "Password must contain at least one uppercase letter";
+    }
+    if (!/[a-z]/.test(password)) {
+      return "Password must contain at least one lowercase letter";
+    }
+    if (!/[0-9]/.test(password)) {
+      return "Password must contain at least one number";
+    }
+    if (!/[!@#$%^&*]/.test(password)) {
+      return "Password must contain at least one special character (!@#$%^&*)";
+    }
+    return "";
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+    
+    if (name === "password") {
+      setPasswordError(validatePassword(value));
+    }
   };
 
   const handleNextStep = () => {
@@ -59,7 +85,13 @@ export function OnboardingForm() {
   const isStepValid = () => {
     switch (step) {
       case 1:
-        return formData.firstName && formData.lastName && formData.email;
+        return (
+          formData.firstName &&
+          formData.lastName &&
+          formData.email &&
+          formData.password &&
+          !passwordError
+        );
       case 2:
         return formData.selectedPlan;
       case 3:
@@ -113,6 +145,45 @@ export function OnboardingForm() {
                   value={formData.email}
                   onChange={handleInputChange}
                 />
+              </div>
+              <div>
+                <Label htmlFor="password">Password</Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    value={formData.password}
+                    onChange={handleInputChange}
+                    className="pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <Eye className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </Button>
+                </div>
+                {passwordError && (
+                  <p className="text-sm text-red-500 mt-1">{passwordError}</p>
+                )}
+                <div className="text-sm text-muted-foreground mt-2">
+                  Password must contain:
+                  <ul className="list-disc list-inside space-y-1 mt-1">
+                    <li>At least 8 characters</li>
+                    <li>One uppercase letter</li>
+                    <li>One lowercase letter</li>
+                    <li>One number</li>
+                    <li>One special character (!@#$%^&*)</li>
+                  </ul>
+                </div>
               </div>
             </div>
           )}

@@ -3,13 +3,13 @@ import { NextApiRequest, NextApiResponse } from "next";
 import Stripe from "stripe";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2023-10-16",
+  apiVersion: "2025-02-24.acacia",
 });
 
 const PLAN_PRICES = {
   free: 0,
-  pro: 2900, // $29.00
-  enterprise: 9900, // $99.00
+  pro: 2900,
+  enterprise: 9900,
 };
 
 export default async function handler(

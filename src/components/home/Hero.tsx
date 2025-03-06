@@ -14,15 +14,10 @@ export function Hero() {
             <p className="mt-6 text-lg leading-8 text-muted-foreground">
               Instantly tailor your resume to match any job description. Get more interviews with our AI-powered resume optimization tool.
             </p>
-            <div className="mt-10 flex items-center justify-center gap-x-6">
+            <div className="mt-10 flex items-center justify-center">
               <Button size="lg" asChild>
                 <Link href="/optimize">
                   Optimize Your Resume
-                </Link>
-              </Button>
-              <Button variant="outline" size="lg" asChild>
-                <Link href="/features">
-                  Learn More
                 </Link>
               </Button>
             </div>

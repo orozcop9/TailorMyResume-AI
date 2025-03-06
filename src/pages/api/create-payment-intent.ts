@@ -2,8 +2,6 @@
 import { NextApiRequest, NextApiResponse } from "next";
 import Stripe from "stripe";
 
-// Make sure to add your secret key to .env.local
-// STRIPE_SECRET_KEY=sk_test_...
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2023-10-16",
 });
@@ -38,6 +36,9 @@ export default async function handler(
     const paymentIntent = await stripe.paymentIntents.create({
       amount,
       currency: "usd",
+      automatic_payment_methods: {
+        enabled: true,
+      },
       metadata: {
         plan,
       },

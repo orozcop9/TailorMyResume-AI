@@ -8,15 +8,21 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
-import { ArrowRight, CheckCircle2, Eye, EyeOff, Github, Mail } from "lucide-react";
+import { ArrowRight, CheckCircle2, Eye, EyeOff, Mail } from "lucide-react";
+import { getStripe } from "@/lib/stripe";
+import { useRouter } from "next/router";
+import { formatCardNumber, formatExpiryDate, validateCardNumber, validateExpiryDate, validateCVV } from "@/lib/payment";
 
 export function OnboardingForm() {
+  const router = useRouter();
   const [step, setStep] = useState(1);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordError, setPasswordError] = useState("");
   const [confirmPasswordError, setConfirmPasswordError] = useState("");
   const [passwordStrength, setPasswordStrength] = useState(0);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [paymentError, setPaymentError] = useState("");
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -105,7 +111,15 @@ export function OnboardingForm() {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    let formattedValue = value;
+
+    if (name === "cardNumber") {
+      formattedValue = formatCardNumber(value);
+    } else if (name === "expiryDate") {
+      formattedValue = formatExpiryDate(value);
+    }
+
+    setFormData((prev) => ({ ...prev, [name]: formattedValue }));
     
     if (name === "password") {
       setPasswordError(validatePassword(value));
@@ -120,12 +134,89 @@ export function OnboardingForm() {
     }
   };
 
-  const handleNextStep = () => {
+  const validatePaymentFields = () => {
+    if (!validateCardNumber(formData.cardNumber)) {
+      setPaymentError("Invalid card number");
+      return false;
+    }
+    if (!validateExpiryDate(formData.expiryDate)) {
+      setPaymentError("Invalid expiry date");
+      return false;
+    }
+    if (!validateCVV(formData.cvv)) {
+      setPaymentError("Invalid CVV");
+      return false;
+    }
+    return true;
+  };
+
+  const createPaymentIntent = async () => {
+    try {
+      const response = await fetch("/api/create-payment-intent", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          plan: formData.selectedPlan,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to create payment intent");
+      }
+
+      const data = await response.json();
+      return data.clientSecret;
+    } catch (error) {
+      console.error("Payment intent error:", error);
+      throw error;
+    }
+  };
+
+  const handleNextStep = async () => {
     if (step < 3) {
       setStep(step + 1);
     } else {
-      // Handle form submission
-      console.log("Form submitted:", formData);
+      if (!validatePaymentFields()) {
+        return;
+      }
+
+      setIsProcessing(true);
+      setPaymentError("");
+
+      try {
+        if (formData.selectedPlan !== "free") {
+          const clientSecret = await createPaymentIntent();
+          const stripe = await getStripe();
+          
+          if (!stripe || !clientSecret) {
+            throw new Error("Stripe initialization failed");
+          }
+
+          const { error } = await stripe.confirmCardPayment(clientSecret, {
+            payment_method: {
+              card: {
+                number: formData.cardNumber.replace(/\s/g, ""),
+                exp_month: parseInt(formData.expiryDate.split("/")[0]),
+                exp_year: parseInt("20" + formData.expiryDate.split("/")[1]),
+                cvc: formData.cvv,
+              },
+            },
+          });
+
+          if (error) {
+            throw new Error(error.message);
+          }
+        }
+
+        router.push("/onboarding/success");
+      } catch (error) {
+        console.error("Payment error:", error);
+        setPaymentError(error instanceof Error ? error.message : "Payment failed");
+      } finally {
+        setIsProcessing(false);
+      }
     }
   };
 
@@ -165,16 +256,10 @@ export function OnboardingForm() {
         <CardContent>
           {step === 1 && (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 gap-4">
-                <Button variant="outline" className="w-full">
-                  <Github className="mr-2 h-4 w-4" />
-                  Continue with GitHub
-                </Button>
-                <Button variant="outline" className="w-full">
-                  <Mail className="mr-2 h-4 w-4" />
-                  Continue with Google
-                </Button>
-              </div>
+              <Button variant="outline" className="w-full">
+                <Mail className="mr-2 h-4 w-4" />
+                Continue with Google
+              </Button>
 
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
@@ -348,6 +433,7 @@ export function OnboardingForm() {
                   value={formData.cardNumber}
                   onChange={handleInputChange}
                   placeholder="1234 5678 9012 3456"
+                  maxLength={19}
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -359,6 +445,7 @@ export function OnboardingForm() {
                     value={formData.expiryDate}
                     onChange={handleInputChange}
                     placeholder="MM/YY"
+                    maxLength={5}
                   />
                 </div>
                 <div>
@@ -369,19 +456,34 @@ export function OnboardingForm() {
                     value={formData.cvv}
                     onChange={handleInputChange}
                     placeholder="123"
+                    maxLength={4}
                   />
                 </div>
               </div>
+              {paymentError && (
+                <p className="text-sm text-red-500">{paymentError}</p>
+              )}
             </div>
           )}
 
           <Button 
             onClick={handleNextStep}
-            disabled={!isStepValid()}
+            disabled={!isStepValid() || isProcessing}
             className="w-full mt-6"
           >
-            {step === 3 ? "Complete Sign Up" : "Continue"}
-            <ArrowRight className="ml-2 h-4 w-4" />
+            {isProcessing ? (
+              <>
+                <Progress value={33} className="mr-2" />
+                Processing...
+              </>
+            ) : step === 3 ? (
+              "Complete Sign Up"
+            ) : (
+              <>
+                Continue
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </>
+            )}
           </Button>
 
           {step === 1 && (

@@ -1,9 +1,14 @@
 
 import { loadStripe } from "@stripe/stripe-js";
 
-// Make sure to add your publishable key to .env.local
-// NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!, {
+  apiVersion: "2025-02-24.acacia",
+  locale: "en",
+  appearance: {
+    theme: "stripe",
+  },
+});
+
 export const getStripe = () => {
-  const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
   return stripePromise;
 };

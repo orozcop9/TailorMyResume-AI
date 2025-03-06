@@ -1,13 +1,13 @@
 
+import { Toaster } from "@/components/ui/toaster";
 import "@/styles/globals.css";
 import type { AppProps } from "next/app";
-import { Chatbot } from "@/components/chat/Chatbot";
 
 export default function App({ Component, pageProps }: AppProps) {
   return (
     <>
       <Component {...pageProps} />
-      <Chatbot />
+      <Toaster />
     </>
   );
 }

@@ -7,7 +7,7 @@ import { Steps } from "@/components/optimize/Steps";
 import { FileUpload } from "@/components/optimize/FileUpload";
 import { Progress } from "@/components/ui/progress";
 import { ArrowRight, Upload, FileText } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/router";
 
 export function OptimizeForm() {

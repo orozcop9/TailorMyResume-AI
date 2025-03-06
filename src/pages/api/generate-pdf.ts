@@ -2,6 +2,12 @@
 import { NextApiRequest, NextApiResponse } from "next";
 import puppeteer from "puppeteer";
 
+interface Improvement {
+  type: string;
+  before: number;
+  after: number;
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -13,7 +19,10 @@ export default async function handler(
   try {
     const { content, improvements, keyChanges } = req.body;
 
-    const browser = await puppeteer.launch({ headless: "new" });
+    const browser = await puppeteer.launch({ 
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
     const page = await browser.newPage();
 
     const html = `
@@ -37,7 +46,7 @@ export default async function handler(
           <div class="content">${content}</div>
           <h2>Improvements</h2>
           <div class="improvements">
-            ${improvements.map(imp => `
+            ${(improvements as Improvement[]).map((imp: Improvement) => `
               <div>
                 <strong>${imp.type}:</strong>
                 Before: ${imp.before}% → After: ${imp.after}%
@@ -47,7 +56,7 @@ export default async function handler(
           <h2>Key Changes</h2>
           <div class="key-changes">
             <ul>
-              ${keyChanges.map(change => `<li>${change}</li>`).join("")}
+              ${(keyChanges as string[]).map((change: string) => `<li>${change}</li>`).join("")}
             </ul>
           </div>
         </body>

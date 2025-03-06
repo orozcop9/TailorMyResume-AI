@@ -7,9 +7,14 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Download, Share2, FileText, CheckCircle2, AlertCircle } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { useToast } from "@/hooks/use-toast";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 
 export function ResultsView() {
   const [activeTab, setActiveTab] = useState("optimized");
+  const [shareUrl, setShareUrl] = useState("");
+  const { toast } = useToast();
   
   const improvements = [
     { type: "Skills Match", before: 65, after: 95 },
@@ -24,6 +29,76 @@ export function ResultsView() {
     "Added quantifiable achievements"
   ];
 
+  const handleDownloadPDF = async () => {
+    try {
+      const response = await fetch("/api/generate-pdf", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          content: document.querySelector(".prose")?.innerHTML,
+          improvements,
+          keyChanges,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to generate PDF");
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "optimized-resume.pdf";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "Success",
+        description: "Your optimized resume has been downloaded",
+      });
+    } catch (error) {
+      toast({
+        title: "Download Failed",
+        description: "Failed to download the PDF. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleShare = async () => {
+    try {
+      const shareData = {
+        title: "My Optimized Resume",
+        text: "Check out my optimized resume!",
+        url: shareUrl || window.location.href,
+      };
+
+      if (navigator.share && navigator.canShare(shareData)) {
+        await navigator.share(shareData);
+        toast({
+          title: "Success",
+          description: "Resume shared successfully",
+        });
+      } else {
+        const url = shareUrl || window.location.href;
+        await navigator.clipboard.writeText(url);
+        toast({
+          title: "Link Copied",
+          description: "Share link copied to clipboard",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Share Failed",
+        description: "Failed to share the resume. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
@@ -34,14 +109,33 @@ export function ResultsView() {
           </p>
         </div>
         <div className="flex gap-4">
-          <Button>
+          <Button onClick={handleDownloadPDF}>
             <Download className="mr-2 h-4 w-4" />
             Download PDF
           </Button>
-          <Button variant="outline">
-            <Share2 className="mr-2 h-4 w-4" />
-            Share
-          </Button>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <Share2 className="mr-2 h-4 w-4" />
+                Share
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Share Your Resume</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <Input
+                  placeholder="Enter custom share URL (optional)"
+                  value={shareUrl}
+                  onChange={(e) => setShareUrl(e.target.value)}
+                />
+                <Button onClick={handleShare} className="w-full">
+                  Share Resume
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 

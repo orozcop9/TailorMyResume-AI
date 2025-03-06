@@ -7,9 +7,9 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 });
 
 const PLAN_PRICES = {
-  free: 0,
+  trial: 0,
   pro: 2900,
-  enterprise: 9900,
+  lifetime: 11900
 };
 
 export default async function handler(

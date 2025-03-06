@@ -3,29 +3,35 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import { Check, Sparkles } from "lucide-react";
+import Link from "next/link";
 
 export function PricingPlans() {
-  const [isAnnual, setIsAnnual] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   
   const plans = [
     {
-      name: "Free",
-      price: { monthly: 0, annual: 0 },
-      description: "Perfect for trying out our services",
+      id: "trial",
+      name: "Free Trial",
+      price: 0,
+      period: "7-day trial",
+      description: "Try all Pro features free for 7 days",
       features: [
-        "1 resume optimization per month",
-        "Basic ATS analysis",
-        "Standard templates",
-        "Email support"
+        "Full access to all features",
+        "Unlimited resume optimizations",
+        "Advanced ATS analysis",
+        "Premium templates",
+        "Cancel anytime",
+        "No credit card required"
       ],
-      cta: "Get Started",
+      cta: "Start Free Trial",
       variant: "outline" as const
     },
     {
+      id: "pro",
       name: "Pro",
-      price: { monthly: 29, annual: 19 },
+      price: 29,
+      period: "per month",
       description: "Best for active job seekers",
       features: [
         "Unlimited resume optimizations",
@@ -35,27 +41,33 @@ export function PricingPlans() {
         "Cover letter assistance",
         "LinkedIn profile optimization"
       ],
-      cta: "Start Pro Plan",
+      cta: "Choose Pro Plan",
       variant: "default" as const,
       popular: true
     },
     {
-      name: "Enterprise",
-      price: { monthly: 99, annual: 79 },
-      description: "For teams and organizations",
+      id: "lifetime",
+      name: "Lifetime",
+      price: 119,
+      period: "one-time payment",
+      description: "Best value for long-term access",
       features: [
-        "Everything in Pro",
-        "Custom templates",
-        "Team management",
-        "API access",
-        "Dedicated success manager",
-        "Custom integration options",
-        "Training sessions"
+        "Everything in Pro plan",
+        "Lifetime access",
+        "All future updates",
+        "Priority support forever",
+        "Exclusive templates",
+        "Personal success manager"
       ],
-      cta: "Contact Sales",
+      cta: "Get Lifetime Access",
       variant: "outline" as const
     }
   ];
+
+  const handleSelectPlan = (planId: string) => {
+    setSelectedPlan(planId);
+    window.location.href = `/onboarding?plan=${planId}`;
+  };
 
   return (
     <div className="container max-w-7xl py-16 space-y-12">
@@ -66,21 +78,14 @@ export function PricingPlans() {
         </p>
       </div>
 
-      <div className="flex items-center justify-center gap-4">
-        <span className={!isAnnual ? "font-medium" : "text-muted-foreground"}>Monthly</span>
-        <Switch
-          checked={isAnnual}
-          onCheckedChange={setIsAnnual}
-        />
-        <span className={isAnnual ? "font-medium" : "text-muted-foreground"}>
-          Annual
-          <Badge variant="secondary" className="ml-2">Save 20%</Badge>
-        </span>
-      </div>
-
       <div className="grid md:grid-cols-3 gap-8">
         {plans.map((plan) => (
-          <Card key={plan.name} className={`relative ${plan.popular ? "border-primary shadow-lg" : ""}`}>
+          <Card 
+            key={plan.id} 
+            className={`relative ${plan.popular ? "border-primary shadow-lg" : ""} ${
+              selectedPlan === plan.id ? "ring-2 ring-primary" : ""
+            }`}
+          >
             {plan.popular && (
               <div className="absolute -top-3 left-0 right-0 flex justify-center">
                 <Badge className="bg-primary text-primary-foreground">
@@ -92,13 +97,13 @@ export function PricingPlans() {
             <CardHeader>
               <CardTitle className="flex items-baseline justify-between">
                 <span>{plan.name}</span>
-                <div>
+                <div className="text-right">
                   <span className="text-3xl font-bold">
-                    ${isAnnual ? plan.price.annual : plan.price.monthly}
+                    ${plan.price}
                   </span>
-                  {plan.price.monthly > 0 && (
-                    <span className="text-muted-foreground">/mo</span>
-                  )}
+                  <div className="text-sm text-muted-foreground">
+                    {plan.period}
+                  </div>
                 </div>
               </CardTitle>
               <p className="text-sm text-muted-foreground">{plan.description}</p>
@@ -118,6 +123,7 @@ export function PricingPlans() {
                 variant={plan.variant}
                 className="w-full"
                 size="lg"
+                onClick={() => handleSelectPlan(plan.id)}
               >
                 {plan.cta}
               </Button>
@@ -134,12 +140,12 @@ export function PricingPlans() {
             <p className="text-sm text-muted-foreground">Yes, you can upgrade or downgrade your plan at any time. Changes will be reflected in your next billing cycle.</p>
           </div>
           <div>
-            <h3 className="font-medium mb-2">What payment methods do you accept?</h3>
-            <p className="text-sm text-muted-foreground">We accept all major credit cards, PayPal, and offer invoice payment for Enterprise plans.</p>
+            <h3 className="font-medium mb-2">What happens after the trial?</h3>
+            <p className="text-sm text-muted-foreground">After your 7-day trial, you can choose to subscribe to our Pro plan or get lifetime access. No automatic charges.</p>
           </div>
           <div>
-            <h3 className="font-medium mb-2">Is there a money-back guarantee?</h3>
-            <p className="text-sm text-muted-foreground">Yes, we offer a 14-day money-back guarantee if you're not satisfied with our service.</p>
+            <h3 className="font-medium mb-2">Is there a refund policy?</h3>
+            <p className="text-sm text-muted-foreground">Yes, we offer a 30-day money-back guarantee if you're not satisfied with our service.</p>
           </div>
         </div>
       </div>

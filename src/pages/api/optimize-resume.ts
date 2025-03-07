@@ -31,6 +31,74 @@ interface ResumeSection {
   originalTitle: string;
 }
 
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse<OptimizationResponse>
+) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ success: false, error: "Method not allowed" });
+  }
+
+  try {
+    const form = formidable();
+    const [fields, files] = await form.parse(req);
+    
+    const jobDescription = fields.jobDescription?.[0];
+    const resumeFile = files.resume?.[0];
+
+    if (!jobDescription || !resumeFile) {
+      return res.status(400).json({
+        success: false,
+        error: "Both job description and resume file are required",
+      });
+    }
+
+    const originalContent = await extractTextFromFile(resumeFile);
+    const sections = findSectionBoundaries(originalContent);
+    
+    let optimizedContent = "";
+    for (const section of sections) {
+      const optimizedSection = optimizeSection(section, jobDescription);
+      optimizedContent += optimizedSection + "\n\n";
+    }
+
+    const jobSkills = extractSkills(jobDescription);
+    const resumeSkills = extractSkills(originalContent);
+    const jobKeywords = extractKeywords(jobDescription);
+    
+    const beforeSkillMatch = calculateSkillMatch(resumeSkills, jobSkills);
+    const afterSkillMatch = calculateSkillMatch(extractSkills(optimizedContent), jobSkills);
+    
+    const beforeKeywordMatch = calculateKeywordMatch(originalContent, jobKeywords);
+    const afterKeywordMatch = calculateKeywordMatch(optimizedContent, jobKeywords);
+    
+    const beforeAtsScore = calculateATSScore(originalContent);
+    const afterAtsScore = calculateATSScore(optimizedContent);
+
+    const improvements = {
+      skillsMatch: afterSkillMatch,
+      atsCompatibility: afterAtsScore,
+      keywordOptimization: afterKeywordMatch
+    };
+
+    const keyChanges = generateKeyChanges(originalContent, optimizedContent, jobDescription);
+
+    return res.status(200).json({
+      success: true,
+      originalContent,
+      optimizedContent,
+      improvements,
+      keyChanges,
+    });
+  } catch (error) {
+    console.error("Error optimizing resume:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to optimize resume",
+    });
+  }
+}
+
 async function extractTextFromFile(file: formidable.File): Promise<string> {
   const fileType = file.originalFilename?.split('.').pop()?.toLowerCase();
   const buffer = await fs.promises.readFile(file.filepath);
@@ -114,7 +182,6 @@ function findSectionBoundaries(content: string): ResumeSection[] {
     const sectionMatch = identifySection(line);
     
     if (sectionMatch || (line && line.length <= 50 && /^[A-Z]/.test(line) && !line.includes(":"))) {
-      // Save previous section if exists
       if (currentSection) {
         sections.push({
           ...currentSection,
@@ -122,7 +189,6 @@ function findSectionBoundaries(content: string): ResumeSection[] {
         });
       }
 
-      // Start new section
       currentSection = {
         type: sectionMatch ? sectionMatch.type : "other",
         title: sectionMatch ? sectionMatch.type.charAt(0).toUpperCase() + sectionMatch.type.slice(1) : line,
@@ -135,7 +201,6 @@ function findSectionBoundaries(content: string): ResumeSection[] {
     }
   });
 
-  // Add final section
   if (currentSection) {
     sections.push({
       ...currentSection,
@@ -147,7 +212,6 @@ function findSectionBoundaries(content: string): ResumeSection[] {
 }
 
 function optimizeSection(section: ResumeSection, jobDescription: string): string {
-  // Preserve original section title
   const sectionHeader = section.originalTitle;
   let optimizedContent = section.content;
 
@@ -162,17 +226,15 @@ function optimizeSection(section: ResumeSection, jobDescription: string): string
       optimizedContent = optimizeSkills(optimizedContent, jobDescription);
       break;
     case "education":
-      optimizedContent = section.content; // Preserve education section as is
+    case "other":
+      optimizedContent = section.content;
       break;
-    default:
-      optimizedContent = section.content; // Preserve other sections as is
   }
 
   return `${sectionHeader}\n${optimizedContent}`;
 }
 
 function optimizeSummary(content: string, jobDescription: string): string {
-  // Preserve original summary content
   let optimized = content;
   const jobKeywords = extractKeywords(jobDescription);
   const relevantKeywords = jobKeywords
@@ -180,9 +242,9 @@ function optimizeSummary(content: string, jobDescription: string): string {
     .slice(0, 3);
 
   if (relevantKeywords.length > 0) {
-    const keywordPhrase = `Experienced in ${relevantKeywords.join(", ")}.`;
+    const keywordPhrase = `\nExperienced in ${relevantKeywords.join(", ")}.`;
     if (!optimized.includes(keywordPhrase)) {
-      optimized = optimized.trim() + '\n' + keywordPhrase;
+      optimized = optimized.trim() + keywordPhrase;
     }
   }
 
@@ -196,9 +258,7 @@ function optimizeExperience(content: string, jobDescription: string): string {
   const optimizedLines = lines.map(line => {
     let optimizedLine = line;
 
-    // Only enhance bullet points or lines starting with action verbs
     if (line.match(/^[-•]|\w+ed|\w+ing/)) {
-      // Keep original line structure while enhancing verbs
       const actionVerbReplacements = {
         "worked on": "developed",
         "helped": "collaborated on",
@@ -217,7 +277,6 @@ function optimizeExperience(content: string, jobDescription: string): string {
         }
       });
 
-      // Add relevant keywords if not present
       const missingKeywords = jobKeywords.filter(
         keyword => !optimizedLine.toLowerCase().includes(keyword.toLowerCase())
       );
@@ -239,7 +298,6 @@ function optimizeSkills(content: string, jobDescription: string): string {
   const existingSkills = extractSkills(content);
   const missingSkills = jobSkills.filter(skill => !existingSkills.includes(skill));
 
-  // Preserve original skills section
   let optimized = content.trim();
   
   if (missingSkills.length > 0) {
@@ -251,19 +309,14 @@ function optimizeSkills(content: string, jobDescription: string): string {
 
 function extractSkills(text: string): string[] {
   const skillPatterns = [
-    // Technical Skills
     /\b(?:javascript|typescript|python|java|c\+\+|ruby|php|swift|kotlin)\b/gi,
     /\b(?:react|angular|vue|node\.js|express|django|flask|spring)\b/gi,
     /\b(?:aws|azure|gcp|docker|kubernetes|terraform|jenkins|git)\b/gi,
     /\b(?:sql|mongodb|postgresql|mysql|redis|elasticsearch)\b/gi,
     /\b(?:html5?|css3?|sass|less|bootstrap|tailwind)\b/gi,
-    
-    // Soft Skills
     /\b(?:leadership|communication|problem[- ]solving|analytical|teamwork)\b/gi,
     /\b(?:project management|agile|scrum|kanban|lean)\b/gi,
     /\b(?:strategic|planning|organization|time management)\b/gi,
-    
-    // Business Skills
     /\b(?:sales|marketing|customer service|business development)\b/gi,
     /\b(?:analysis|research|reporting|presentation)\b/gi
   ];
@@ -297,6 +350,60 @@ function extractKeywords(text: string): string[] {
   ));
 }
 
-// Rest of the file remains unchanged...
-[Previous implementation of handler function and other utility functions]
+function calculateSkillMatch(resumeSkills: string[], jobSkills: string[]): number {
+  if (jobSkills.length === 0) return 100;
+  const matchingSkills = resumeSkills.filter(skill => jobSkills.includes(skill));
+  return Math.round((matchingSkills.length / jobSkills.length) * 100);
+}
 
+function calculateKeywordMatch(content: string, keywords: string[]): number {
+  if (keywords.length === 0) return 100;
+  const contentWords = new Set(content.toLowerCase().match(/\b\w+\b/g) || []);
+  const matches = keywords.filter(keyword => contentWords.has(keyword));
+  return Math.round((matches.length / keywords.length) * 100);
+}
+
+function calculateATSScore(content: string): number {
+  let score = 85;
+
+  if (content.match(/education|experience|skills/gi)) score += 5;
+  if (content.match(/^\s*[-•]/gm)) score += 5;
+  if (content.match(/increased|decreased|improved|reduced|achieved|delivered/gi)) score += 3;
+  if (content.match(/\d+%|\$\d+|\d+ (users|customers|clients|projects)/gi)) score += 2;
+
+  return Math.min(score, 100);
+}
+
+function generateKeyChanges(original: string, optimized: string, jobDescription: string): string[] {
+  const changes: string[] = [];
+  
+  const originalSkills = extractSkills(original);
+  const optimizedSkills = extractSkills(optimized);
+  const newSkills = optimizedSkills.filter(skill => !originalSkills.includes(skill));
+  
+  if (newSkills.length > 0) {
+    changes.push(`Added relevant skills: ${newSkills.join(", ")}`);
+  }
+
+  const actionVerbsRegex = /\b(led|developed|managed|created|implemented|designed|optimized|improved)\b/gi;
+  const originalActionVerbs = original.match(actionVerbsRegex)?.length || 0;
+  const optimizedActionVerbs = optimized.match(actionVerbsRegex)?.length || 0;
+  
+  if (optimizedActionVerbs > originalActionVerbs) {
+    changes.push("Enhanced impact with stronger action verbs");
+  }
+
+  const jobKeywords = extractKeywords(jobDescription);
+  const originalKeywordCount = jobKeywords.filter(keyword => 
+    original.toLowerCase().includes(keyword.toLowerCase())
+  ).length;
+  const optimizedKeywordCount = jobKeywords.filter(keyword => 
+    optimized.toLowerCase().includes(keyword.toLowerCase())
+  ).length;
+
+  if (optimizedKeywordCount > originalKeywordCount) {
+    changes.push(`Added ${optimizedKeywordCount - originalKeywordCount} job-specific keywords`);
+  }
+
+  return changes;
+}

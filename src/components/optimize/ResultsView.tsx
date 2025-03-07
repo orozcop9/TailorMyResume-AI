@@ -5,14 +5,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Download, Share2, FileText, CheckCircle2, AlertCircle } from "lucide-react";
+import { Download, Share2, CheckCircle2, AlertCircle, Plus, ArrowRight } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 
 export function ResultsView() {
-  const [activeTab, setActiveTab] = useState("optimized");
+  const [activeTab, setActiveTab] = useState("comparison");
   const [shareUrl, setShareUrl] = useState("");
   const { toast } = useToast();
   
@@ -23,23 +23,42 @@ export function ResultsView() {
   ];
 
   const keyChanges = [
-    "Added missing key skills: React.js, TypeScript, AWS",
-    "Improved action verbs in experience descriptions",
-    "Optimized formatting for ATS readability",
-    "Added quantifiable achievements"
+    { type: "added", text: "Key skills: React.js, TypeScript, AWS" },
+    { type: "improved", text: "Action verbs in experience descriptions" },
+    { type: "optimized", text: "ATS-friendly formatting structure" },
+    { type: "added", text: "Quantifiable achievements and metrics" }
+  ];
+
+  const beforeAfterComparison = [
+    {
+      section: "Professional Summary",
+      before: "Experienced frontend developer with 5 years of experience in web development",
+      after: "Results-driven frontend developer with 5+ years of expertise in modern web development, specializing in React.js and TypeScript. Proven track record of delivering high-performance applications and optimizing user experiences.",
+      highlights: ["Results-driven", "specializing in React.js and TypeScript", "Proven track record"]
+    },
+    {
+      section: "Key Achievements",
+      before: "Developed web applications using React",
+      after: "Architected and developed scalable React.js applications, increasing user engagement by 45% and reducing load times by 30%",
+      highlights: ["increasing user engagement by 45%", "reducing load times by 30%"]
+    },
+    {
+      section: "Technical Skills",
+      before: "React, JavaScript, HTML, CSS",
+      after: "React.js, TypeScript, Node.js, AWS, REST APIs, GraphQL, CI/CD, Performance Optimization",
+      highlights: ["TypeScript", "AWS", "GraphQL", "CI/CD"]
+    }
   ];
 
   const handleDownloadPDF = async () => {
     try {
       const response = await fetch("/api/generate-pdf", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          content: document.querySelector(".prose")?.innerHTML,
+          content: document.querySelector(".optimized-content")?.innerHTML,
           improvements,
-          keyChanges,
+          keyChanges: keyChanges.map(k => k.text),
         }),
       });
 
@@ -105,7 +124,7 @@ export function ResultsView() {
         <div>
           <h1 className="text-3xl font-bold">Resume Optimization Results</h1>
           <p className="text-muted-foreground mt-2">
-            Your resume has been optimized for maximum impact
+            Your resume has been enhanced for maximum impact
           </p>
         </div>
         <div className="flex gap-4">
@@ -169,8 +188,12 @@ export function ResultsView() {
           <div className="space-y-4">
             {keyChanges.map((change, index) => (
               <div key={index} className="flex items-start gap-3">
-                <CheckCircle2 className="h-5 w-5 text-primary mt-0.5" />
-                <span>{change}</span>
+                {change.type === "added" ? (
+                  <Plus className="h-5 w-5 text-green-500 mt-0.5" />
+                ) : (
+                  <CheckCircle2 className="h-5 w-5 text-primary mt-0.5" />
+                )}
+                <span>{change.text}</span>
               </div>
             ))}
           </div>
@@ -182,38 +205,36 @@ export function ResultsView() {
           <CardTitle>Resume Comparison</CardTitle>
         </CardHeader>
         <CardContent>
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="original">Original Resume</TabsTrigger>
-              <TabsTrigger value="optimized">Optimized Resume</TabsTrigger>
-            </TabsList>
-            <TabsContent value="original" className="mt-6">
-              <div className="prose max-w-none">
-                <h2>Senior Frontend Developer</h2>
-                <p>Experienced frontend developer with 5 years of experience in web development...</p>
-                <h3>Experience</h3>
-                <p>Frontend Developer at Tech Corp<br />2018 - Present</p>
-                <ul>
-                  <li>Developed web applications using React</li>
-                  <li>Worked with cross-functional teams</li>
-                  <li>Implemented new features</li>
-                </ul>
+          <div className="space-y-8">
+            {beforeAfterComparison.map((section, index) => (
+              <div key={index} className="space-y-4">
+                <h3 className="font-medium text-lg">{section.section}</h3>
+                <div className="grid grid-cols-2 gap-8">
+                  <div className="space-y-2">
+                    <div className="text-sm font-medium text-muted-foreground">Before</div>
+                    <div className="p-4 rounded-lg border bg-muted/50">{section.before}</div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="text-sm font-medium text-primary">After</div>
+                    <div className="p-4 rounded-lg border bg-primary/5 relative">
+                      {section.after}
+                      <div className="absolute -right-4 top-1/2 -translate-y-1/2">
+                        <ArrowRight className="h-6 w-6 text-primary" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {section.highlights.map((highlight, i) => (
+                    <Badge key={i} variant="secondary" className="bg-primary/10 text-primary border-primary/20">
+                      {highlight}
+                    </Badge>
+                  ))}
+                </div>
+                {index < beforeAfterComparison.length - 1 && <Separator />}
               </div>
-            </TabsContent>
-            <TabsContent value="optimized" className="mt-6">
-              <div className="prose max-w-none">
-                <h2>Senior Frontend Developer</h2>
-                <p>Results-driven frontend developer with 5+ years of expertise in modern web development...</p>
-                <h3>Professional Experience</h3>
-                <p>Senior Frontend Developer at Tech Corp<br />2018 - Present</p>
-                <ul>
-                  <li>Architected and developed scalable React.js applications, increasing user engagement by 45%</li>
-                  <li>Led cross-functional teams in delivering 15+ successful projects</li>
-                  <li>Implemented performance optimizations resulting in 30% faster load times</li>
-                </ul>
-              </div>
-            </TabsContent>
-          </Tabs>
+            ))}
+          </div>
         </CardContent>
       </Card>
 

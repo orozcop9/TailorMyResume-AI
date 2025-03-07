@@ -2,7 +2,8 @@
 import { NextApiRequest, NextApiResponse } from "next";
 import formidable from "formidable";
 import fs from "fs";
-import path from "path";
+import pdf from "pdf-parse";
+import mammoth from "mammoth";
 
 export const config = {
   api: {
@@ -21,6 +22,28 @@ interface OptimizationResponse {
   };
   keyChanges?: string[];
   error?: string;
+}
+
+async function extractTextFromFile(file: formidable.File): Promise<string> {
+  const fileType = file.originalFilename?.split('.').pop()?.toLowerCase();
+  const buffer = await fs.promises.readFile(file.filepath);
+
+  switch (fileType) {
+    case 'pdf':
+      const pdfData = await pdf(buffer);
+      return pdfData.text;
+    
+    case 'docx':
+      const docxResult = await mammoth.extractRawText({ buffer });
+      return docxResult.value;
+    
+    case 'doc':
+      // For .doc files, you might need a different library
+      throw new Error("DOC format not supported yet");
+    
+    default:
+      throw new Error("Unsupported file format");
+  }
 }
 
 export default async function handler(
@@ -45,18 +68,27 @@ export default async function handler(
       });
     }
 
-    const originalContent = await fs.promises.readFile(resumeFile.filepath, "utf-8");
-    const optimizedContent = await optimizeResume(originalContent, jobDescription);
-
-    // Extract skills from both job description and resume
-    const jobSkills = extractSkills(jobDescription);
-    const resumeSkills = extractSkills(originalContent);
+    // Extract text from the uploaded resume
+    const originalContent = await extractTextFromFile(resumeFile);
     
-    // Calculate skill match percentage
-    const skillMatchBefore = calculateSkillMatch(resumeSkills, jobSkills);
-    const skillMatchAfter = calculateSkillMatch(extractSkills(optimizedContent), jobSkills);
+    // Extract key information from the job description
+    const jobSkills = extractSkills(jobDescription);
+    const jobKeywords = extractKeywords(jobDescription);
+    
+    // Optimize the resume content
+    const optimizedContent = await optimizeResume(originalContent, jobDescription);
+    
+    // Calculate improvements
+    const beforeSkillMatch = calculateSkillMatch(extractSkills(originalContent), jobSkills);
+    const afterSkillMatch = calculateSkillMatch(extractSkills(optimizedContent), jobSkills);
+    
+    const beforeKeywordMatch = calculateKeywordMatch(originalContent, jobKeywords);
+    const afterKeywordMatch = calculateKeywordMatch(optimizedContent, jobKeywords);
+    
+    const beforeAtsScore = calculateATSScore(originalContent);
+    const afterAtsScore = calculateATSScore(optimizedContent);
 
-    // Generate key changes based on actual differences
+    // Generate detailed changes
     const keyChanges = generateKeyChanges(originalContent, optimizedContent, jobDescription);
 
     return res.status(200).json({
@@ -64,9 +96,9 @@ export default async function handler(
       originalContent,
       optimizedContent,
       improvements: {
-        skillsMatch: skillMatchAfter,
-        atsCompatibility: calculateATSScore(optimizedContent),
-        keywordOptimization: calculateKeywordScore(optimizedContent, jobDescription),
+        skillsMatch: afterSkillMatch,
+        atsCompatibility: afterAtsScore,
+        keywordOptimization: afterKeywordMatch,
       },
       keyChanges,
     });
@@ -80,10 +112,15 @@ export default async function handler(
 }
 
 function extractSkills(text: string): string[] {
-  // Extract technical skills, soft skills, and keywords
   const skillsRegex = /\b(javascript|python|react|node\.js|typescript|aws|api|sql|html|css|management|leadership|communication)\b/gi;
   const matches = text.match(skillsRegex) || [];
   return Array.from(new Set(matches.map(skill => skill.toLowerCase())));
+}
+
+function extractKeywords(text: string): string[] {
+  const commonWords = new Set(['and', 'the', 'or', 'in', 'at', 'on', 'to', 'for']);
+  const words = text.toLowerCase().match(/\b\w+\b/g) || [];
+  return Array.from(new Set(words.filter(word => !commonWords.has(word))));
 }
 
 function calculateSkillMatch(resumeSkills: string[], jobSkills: string[]): number {
@@ -92,8 +129,14 @@ function calculateSkillMatch(resumeSkills: string[], jobSkills: string[]): numbe
   return Math.round((matchingSkills.length / jobSkills.length) * 100);
 }
 
+function calculateKeywordMatch(content: string, keywords: string[]): number {
+  const contentWords = new Set(content.toLowerCase().match(/\b\w+\b/g) || []);
+  const matches = keywords.filter(keyword => contentWords.has(keyword));
+  return Math.round((matches.length / keywords.length) * 100);
+}
+
 function calculateATSScore(content: string): number {
-  let score = 85; // Base score
+  let score = 85;
 
   // Check for proper section headers
   if (content.match(/education|experience|skills/gi)) score += 5;
@@ -105,23 +148,6 @@ function calculateATSScore(content: string): number {
   if (content.match(/increased|decreased|improved|reduced|achieved|delivered/gi)) score += 3;
 
   return Math.min(score, 100);
-}
-
-function calculateKeywordScore(content: string, jobDescription: string): number {
-  const jobKeywords = extractKeywords(jobDescription);
-  const resumeKeywords = extractKeywords(content);
-  
-  const matchingKeywords = resumeKeywords.filter(keyword => 
-    jobKeywords.includes(keyword)
-  );
-
-  return Math.round((matchingKeywords.length / jobKeywords.length) * 100);
-}
-
-function extractKeywords(text: string): string[] {
-  const commonWords = new Set(['and', 'the', 'or', 'in', 'at', 'on', 'to', 'for']);
-  const words = text.toLowerCase().match(/\b\w+\b/g) || [];
-  return Array.from(new Set(words.filter(word => !commonWords.has(word))));
 }
 
 function generateKeyChanges(original: string, optimized: string, jobDescription: string): string[] {
@@ -154,17 +180,10 @@ function generateKeyChanges(original: string, optimized: string, jobDescription:
     changes.push("Added quantifiable achievements and metrics");
   }
 
-  // Check for improved formatting
-  if (optimized.match(/^[A-Z][^.!?]*[.!?]$/gm)?.length || 0 > original.match(/^[A-Z][^.!?]*[.!?]$/gm)?.length || 0) {
-    changes.push("Improved sentence structure and formatting");
-  }
-
   return changes;
 }
 
 async function optimizeResume(originalContent: string, jobDescription: string): Promise<string> {
-  // Here you would integrate with an AI service for actual optimization
-  // For now, we'll do some basic enhancements
   let optimized = originalContent;
 
   // Add missing skills from job description
@@ -180,6 +199,8 @@ async function optimizeResume(originalContent: string, jobDescription: string): 
   optimized = optimized.replace(/worked on/gi, "developed");
   optimized = optimized.replace(/helped/gi, "collaborated");
   optimized = optimized.replace(/made/gi, "created");
+  optimized = optimized.replace(/did/gi, "executed");
+  optimized = optimized.replace(/was responsible for/gi, "led");
 
   return optimized;
 }

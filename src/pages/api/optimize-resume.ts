@@ -26,6 +26,7 @@ interface OptimizationResponse {
 
 interface ResumeSection {
   type: "summary" | "experience" | "education" | "skills";
+  title: string;
   content: string;
 }
 
@@ -50,33 +51,54 @@ async function extractTextFromFile(file: formidable.File): Promise<string> {
   }
 }
 
-function parseResumeContent(content: string): ResumeSection[] {
-  const sections: ResumeSection[] = [];
-  const lines = content.split('\n');
-  let currentSection: ResumeSection | null = null;
+function findSectionBoundaries(content: string): { start: number; end: number; type: string; title: string }[] {
+  const sectionHeaders = [
+    { type: "summary", patterns: ["summary", "objective", "professional summary", "career objective"] },
+    { type: "experience", patterns: ["experience", "work history", "work experience", "professional experience", "employment"] },
+    { type: "education", patterns: ["education", "academic background", "academic qualifications"] },
+    { type: "skills", patterns: ["skills", "technical skills", "core competencies", "expertise", "technologies"] }
+  ];
 
-  for (const line of lines) {
-    const trimmedLine = line.trim().toLowerCase();
+  const sections: { start: number; end: number; type: string; title: string }[] = [];
+  const lines = content.split('\n');
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim().toLowerCase();
     
-    if (trimmedLine.includes("summary") || trimmedLine.includes("objective")) {
-      if (currentSection) sections.push(currentSection);
-      currentSection = { type: "summary", content: "" };
-    } else if (trimmedLine.includes("experience") || trimmedLine.includes("work history")) {
-      if (currentSection) sections.push(currentSection);
-      currentSection = { type: "experience", content: "" };
-    } else if (trimmedLine.includes("education")) {
-      if (currentSection) sections.push(currentSection);
-      currentSection = { type: "education", content: "" };
-    } else if (trimmedLine.includes("skills") || trimmedLine.includes("technologies")) {
-      if (currentSection) sections.push(currentSection);
-      currentSection = { type: "skills", content: "" };
-    } else if (currentSection) {
-      currentSection.content += line + "\n";
+    for (const header of sectionHeaders) {
+      if (header.patterns.some(pattern => line.includes(pattern))) {
+        sections.push({
+          start: i,
+          end: -1, // Will be set later
+          type: header.type,
+          title: lines[i].trim() // Keep original casing
+        });
+        break;
+      }
     }
   }
 
-  if (currentSection) sections.push(currentSection);
+  // Set section end boundaries
+  for (let i = 0; i < sections.length; i++) {
+    sections[i].end = i === sections.length - 1 
+      ? lines.length 
+      : sections[i + 1].start;
+  }
+
   return sections;
+}
+
+function parseResumeContent(content: string): ResumeSection[] {
+  const lines = content.split('\n');
+  const sectionBoundaries = findSectionBoundaries(content);
+  
+  return sectionBoundaries.map(boundary => ({
+    type: boundary.type as "summary" | "experience" | "education" | "skills",
+    title: boundary.title,
+    content: lines.slice(boundary.start + 1, boundary.end)
+      .filter(line => line.trim())
+      .join('\n')
+  }));
 }
 
 function optimizeSection(section: ResumeSection, jobDescription: string): string {
@@ -87,7 +109,7 @@ function optimizeSection(section: ResumeSection, jobDescription: string): string
       optimized = optimizeSummary(optimized, jobDescription);
       break;
     case "experience":
-      optimized = optimizeExperience(optimized);
+      optimized = optimizeExperience(optimized, jobDescription);
       break;
     case "skills":
       optimized = optimizeSkills(optimized, jobDescription);
@@ -97,57 +119,67 @@ function optimizeSection(section: ResumeSection, jobDescription: string): string
       break;
   }
 
-  return optimized;
+  return `${section.title}\n${optimized}`;
 }
 
 function optimizeSummary(content: string, jobDescription: string): string {
-  let optimized = content;
   const jobKeywords = extractKeywords(jobDescription);
   const jobSkills = extractSkills(jobDescription);
 
-  // Enhance professional title if found
-  optimized = optimized.replace(
-    /^([\w\s]+) with (\d+)/i,
-    (_, title, years) => `Results-driven ${title} with ${years}+`
-  );
+  let optimized = content;
 
-  // Add relevant skills from job description
-  const relevantSkills = jobSkills.slice(0, 3).join(", ");
-  if (!optimized.includes(relevantSkills)) {
-    optimized += ` Specialized in ${relevantSkills}.`;
+  // Keep existing content but enhance with job-specific keywords
+  const relevantJobKeywords = jobKeywords
+    .filter(keyword => !content.toLowerCase().includes(keyword.toLowerCase()))
+    .slice(0, 3);
+
+  if (relevantJobKeywords.length > 0) {
+    optimized += `\nProficient in ${relevantJobKeywords.join(", ")}.`;
   }
 
   return optimized;
 }
 
-function optimizeExperience(content: string): string {
-  let optimized = content;
+function optimizeExperience(content: string, jobDescription: string): string {
+  const lines = content.split('\n');
+  const jobKeywords = extractKeywords(jobDescription);
+  
+  const optimizedLines = lines.map(line => {
+    let optimizedLine = line;
 
-  // Enhance action verbs
-  const actionVerbReplacements = {
-    "worked on": "developed",
-    "helped": "collaborated on",
-    "made": "created",
-    "did": "executed",
-    "was responsible for": "led",
-    "managed": "orchestrated",
-    "built": "architected",
-    "created": "designed and implemented",
-  };
+    // Only enhance lines that contain accomplishments or responsibilities
+    if (line.match(/^[-•]|\w+ed|\w+ing/)) {
+      // Replace weak verbs with strong ones
+      const actionVerbReplacements = {
+        "worked on": "developed",
+        "helped": "collaborated on",
+        "made": "created",
+        "did": "executed",
+        "was responsible for": "led",
+        "managed": "orchestrated",
+        "built": "architected",
+        "created": "designed and implemented",
+      };
 
-  Object.entries(actionVerbReplacements).forEach(([weak, strong]) => {
-    optimized = optimized.replace(new RegExp(weak, "gi"), strong);
+      Object.entries(actionVerbReplacements).forEach(([weak, strong]) => {
+        optimizedLine = optimizedLine.replace(new RegExp(`\\b${weak}\\b`, "gi"), strong);
+      });
+
+      // Add relevant keywords from job description if not present
+      const lineKeywords = extractKeywords(optimizedLine);
+      const missingKeywords = jobKeywords.filter(
+        keyword => !lineKeywords.includes(keyword.toLowerCase())
+      );
+
+      if (missingKeywords.length > 0 && !optimizedLine.includes("utilizing") && !optimizedLine.includes("using")) {
+        optimizedLine += ` utilizing ${missingKeywords[0]}`;
+      }
+    }
+
+    return optimizedLine;
   });
 
-  // Add metrics if not present
-  if (!optimized.includes("%") && !optimized.includes("increased")) {
-    optimized = optimized.replace(
-      /(developed|created|implemented|designed) ([\w\s]+)/gi,
-      (match, verb, project) => `${verb} ${project}, improving efficiency by 30%`
-    );
-  }
-
-  return optimized;
+  return optimizedLines.join('\n');
 }
 
 function optimizeSkills(content: string, jobDescription: string): string {
@@ -156,6 +188,8 @@ function optimizeSkills(content: string, jobDescription: string): string {
   const missingSkills = jobSkills.filter(skill => !existingSkills.includes(skill));
 
   let optimized = content.trim();
+  
+  // Only add missing skills that are relevant to the job
   if (missingSkills.length > 0) {
     optimized += `\nAdditional relevant skills: ${missingSkills.join(", ")}`;
   }
@@ -232,13 +266,14 @@ export default async function handler(
 }
 
 function extractSkills(text: string): string[] {
-  const skillsRegex = /\b(javascript|python|react|node\.js|typescript|aws|api|sql|html|css|management|leadership|communication)\b/gi;
+  // Expanded skills regex to catch more technical and soft skills
+  const skillsRegex = /\b(javascript|python|react|node\.js|typescript|aws|api|sql|html|css|java|c\+\+|ruby|php|golang|swift|kotlin|docker|kubernetes|ci\/cd|agile|scrum|management|leadership|communication|problem[- ]solving|team[- ]work|analytical|project management|customer service|sales|marketing)\b/gi;
   const matches = text.match(skillsRegex) || [];
   return Array.from(new Set(matches.map(skill => skill.toLowerCase())));
 }
 
 function extractKeywords(text: string): string[] {
-  const commonWords = new Set(['and', 'the', 'or', 'in', 'at', 'on', 'to', 'for']);
+  const commonWords = new Set(['and', 'the', 'or', 'in', 'at', 'on', 'to', 'for', 'of', 'with', 'by']);
   const words = text.toLowerCase().match(/\b\w+\b/g) || [];
   return Array.from(new Set(words.filter(word => !commonWords.has(word))));
 }
@@ -259,8 +294,9 @@ function calculateATSScore(content: string): number {
   let score = 85;
 
   if (content.match(/education|experience|skills/gi)) score += 5;
-  if (content.match(/^\s*•/gm)) score += 5;
+  if (content.match(/^\s*[-•]/gm)) score += 5;
   if (content.match(/increased|decreased|improved|reduced|achieved|delivered/gi)) score += 3;
+  if (content.match(/\d+%|\$\d+|\d+ (users|customers|clients|projects)/gi)) score += 2;
 
   return Math.min(score, 100);
 }
@@ -290,6 +326,18 @@ function generateKeyChanges(original: string, optimized: string, jobDescription:
   
   if (optimizedMetrics > originalMetrics) {
     changes.push("Added quantifiable achievements and metrics");
+  }
+
+  const jobKeywords = extractKeywords(jobDescription);
+  const originalKeywordCount = jobKeywords.filter(keyword => 
+    original.toLowerCase().includes(keyword.toLowerCase())
+  ).length;
+  const optimizedKeywordCount = jobKeywords.filter(keyword => 
+    optimized.toLowerCase().includes(keyword.toLowerCase())
+  ).length;
+
+  if (optimizedKeywordCount > originalKeywordCount) {
+    changes.push(`Incorporated ${optimizedKeywordCount - originalKeywordCount} additional job-specific keywords`);
   }
 
   return changes;

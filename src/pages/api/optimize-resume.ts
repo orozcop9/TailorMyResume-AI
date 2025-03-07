@@ -24,6 +24,11 @@ interface OptimizationResponse {
   error?: string;
 }
 
+interface ResumeSection {
+  type: "summary" | "experience" | "education" | "skills";
+  content: string;
+}
+
 async function extractTextFromFile(file: formidable.File): Promise<string> {
   const fileType = file.originalFilename?.split('.').pop()?.toLowerCase();
   const buffer = await fs.promises.readFile(file.filepath);
@@ -38,12 +43,128 @@ async function extractTextFromFile(file: formidable.File): Promise<string> {
       return docxResult.value;
     
     case 'doc':
-      // For .doc files, you might need a different library
       throw new Error("DOC format not supported yet");
     
     default:
       throw new Error("Unsupported file format");
   }
+}
+
+function parseResumeContent(content: string): ResumeSection[] {
+  const sections: ResumeSection[] = [];
+  const lines = content.split('\n');
+  let currentSection: ResumeSection | null = null;
+
+  for (const line of lines) {
+    const trimmedLine = line.trim().toLowerCase();
+    
+    if (trimmedLine.includes("summary") || trimmedLine.includes("objective")) {
+      if (currentSection) sections.push(currentSection);
+      currentSection = { type: "summary", content: "" };
+    } else if (trimmedLine.includes("experience") || trimmedLine.includes("work history")) {
+      if (currentSection) sections.push(currentSection);
+      currentSection = { type: "experience", content: "" };
+    } else if (trimmedLine.includes("education")) {
+      if (currentSection) sections.push(currentSection);
+      currentSection = { type: "education", content: "" };
+    } else if (trimmedLine.includes("skills") || trimmedLine.includes("technologies")) {
+      if (currentSection) sections.push(currentSection);
+      currentSection = { type: "skills", content: "" };
+    } else if (currentSection) {
+      currentSection.content += line + "\n";
+    }
+  }
+
+  if (currentSection) sections.push(currentSection);
+  return sections;
+}
+
+function optimizeSection(section: ResumeSection, jobDescription: string): string {
+  let optimized = section.content;
+
+  switch (section.type) {
+    case "summary":
+      optimized = optimizeSummary(optimized, jobDescription);
+      break;
+    case "experience":
+      optimized = optimizeExperience(optimized);
+      break;
+    case "skills":
+      optimized = optimizeSkills(optimized, jobDescription);
+      break;
+    case "education":
+      optimized = optimizeEducation(optimized);
+      break;
+  }
+
+  return optimized;
+}
+
+function optimizeSummary(content: string, jobDescription: string): string {
+  let optimized = content;
+  const jobKeywords = extractKeywords(jobDescription);
+  const jobSkills = extractSkills(jobDescription);
+
+  // Enhance professional title if found
+  optimized = optimized.replace(
+    /^([\w\s]+) with (\d+)/i,
+    (_, title, years) => `Results-driven ${title} with ${years}+`
+  );
+
+  // Add relevant skills from job description
+  const relevantSkills = jobSkills.slice(0, 3).join(", ");
+  if (!optimized.includes(relevantSkills)) {
+    optimized += ` Specialized in ${relevantSkills}.`;
+  }
+
+  return optimized;
+}
+
+function optimizeExperience(content: string): string {
+  let optimized = content;
+
+  // Enhance action verbs
+  const actionVerbReplacements = {
+    "worked on": "developed",
+    "helped": "collaborated on",
+    "made": "created",
+    "did": "executed",
+    "was responsible for": "led",
+    "managed": "orchestrated",
+    "built": "architected",
+    "created": "designed and implemented",
+  };
+
+  Object.entries(actionVerbReplacements).forEach(([weak, strong]) => {
+    optimized = optimized.replace(new RegExp(weak, "gi"), strong);
+  });
+
+  // Add metrics if not present
+  if (!optimized.includes("%") && !optimized.includes("increased")) {
+    optimized = optimized.replace(
+      /(developed|created|implemented|designed) ([\w\s]+)/gi,
+      (match, verb, project) => `${verb} ${project}, improving efficiency by 30%`
+    );
+  }
+
+  return optimized;
+}
+
+function optimizeSkills(content: string, jobDescription: string): string {
+  const jobSkills = extractSkills(jobDescription);
+  const existingSkills = extractSkills(content);
+  const missingSkills = jobSkills.filter(skill => !existingSkills.includes(skill));
+
+  let optimized = content.trim();
+  if (missingSkills.length > 0) {
+    optimized += `\nAdditional relevant skills: ${missingSkills.join(", ")}`;
+  }
+
+  return optimized;
+}
+
+function optimizeEducation(content: string): string {
+  return content.trim();
 }
 
 export default async function handler(
@@ -68,17 +189,17 @@ export default async function handler(
       });
     }
 
-    // Extract text from the uploaded resume
     const originalContent = await extractTextFromFile(resumeFile);
+    const resumeSections = parseResumeContent(originalContent);
     
-    // Extract key information from the job description
+    let optimizedContent = "";
+    for (const section of resumeSections) {
+      optimizedContent += optimizeSection(section, jobDescription) + "\n\n";
+    }
+    
     const jobSkills = extractSkills(jobDescription);
     const jobKeywords = extractKeywords(jobDescription);
     
-    // Optimize the resume content
-    const optimizedContent = await optimizeResume(originalContent, jobDescription);
-    
-    // Calculate improvements
     const beforeSkillMatch = calculateSkillMatch(extractSkills(originalContent), jobSkills);
     const afterSkillMatch = calculateSkillMatch(extractSkills(optimizedContent), jobSkills);
     
@@ -88,7 +209,6 @@ export default async function handler(
     const beforeAtsScore = calculateATSScore(originalContent);
     const afterAtsScore = calculateATSScore(optimizedContent);
 
-    // Generate detailed changes
     const keyChanges = generateKeyChanges(originalContent, optimizedContent, jobDescription);
 
     return res.status(200).json({
@@ -138,13 +258,8 @@ function calculateKeywordMatch(content: string, keywords: string[]): number {
 function calculateATSScore(content: string): number {
   let score = 85;
 
-  // Check for proper section headers
   if (content.match(/education|experience|skills/gi)) score += 5;
-  
-  // Check for proper formatting
   if (content.match(/^\s*•/gm)) score += 5;
-  
-  // Check for measurable achievements
   if (content.match(/increased|decreased|improved|reduced|achieved|delivered/gi)) score += 3;
 
   return Math.min(score, 100);
@@ -153,7 +268,6 @@ function calculateATSScore(content: string): number {
 function generateKeyChanges(original: string, optimized: string, jobDescription: string): string[] {
   const changes: string[] = [];
   
-  // Compare skills before and after
   const originalSkills = extractSkills(original);
   const optimizedSkills = extractSkills(optimized);
   const newSkills = optimizedSkills.filter(skill => !originalSkills.includes(skill));
@@ -162,7 +276,6 @@ function generateKeyChanges(original: string, optimized: string, jobDescription:
     changes.push(`Added key skills: ${newSkills.join(", ")}`);
   }
 
-  // Check for improved action verbs
   const actionVerbsRegex = /\b(led|developed|managed|created|implemented|designed|optimized|improved)\b/gi;
   const originalActionVerbs = original.match(actionVerbsRegex)?.length || 0;
   const optimizedActionVerbs = optimized.match(actionVerbsRegex)?.length || 0;
@@ -171,7 +284,6 @@ function generateKeyChanges(original: string, optimized: string, jobDescription:
     changes.push("Enhanced impact with stronger action verbs");
   }
 
-  // Check for quantifiable achievements
   const metricsRegex = /\b\d+%|\$\d+|\d+ (users|customers|clients|projects)\b/gi;
   const originalMetrics = original.match(metricsRegex)?.length || 0;
   const optimizedMetrics = optimized.match(metricsRegex)?.length || 0;
@@ -181,26 +293,4 @@ function generateKeyChanges(original: string, optimized: string, jobDescription:
   }
 
   return changes;
-}
-
-async function optimizeResume(originalContent: string, jobDescription: string): Promise<string> {
-  let optimized = originalContent;
-
-  // Add missing skills from job description
-  const jobSkills = extractSkills(jobDescription);
-  const resumeSkills = extractSkills(originalContent);
-  const missingSkills = jobSkills.filter(skill => !resumeSkills.includes(skill));
-  
-  if (missingSkills.length > 0) {
-    optimized += `\n\nAdditional Skills: ${missingSkills.join(", ")}`;
-  }
-
-  // Enhance action verbs
-  optimized = optimized.replace(/worked on/gi, "developed");
-  optimized = optimized.replace(/helped/gi, "collaborated");
-  optimized = optimized.replace(/made/gi, "created");
-  optimized = optimized.replace(/did/gi, "executed");
-  optimized = optimized.replace(/was responsible for/gi, "led");
-
-  return optimized;
 }

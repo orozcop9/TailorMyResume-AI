@@ -30,33 +30,167 @@ export default async function handler(
         <head>
           <style>
             body {
-              font-family: Arial, sans-serif;
+              font-family: "Helvetica", "Arial", sans-serif;
               margin: 40px;
               line-height: 1.6;
+              color: #333;
             }
-            h1 { font-size: 24px; margin-bottom: 20px; }
-            h2 { font-size: 20px; margin-bottom: 15px; }
-            .content { margin-bottom: 30px; }
-            .improvements { margin-bottom: 30px; }
-            .key-changes { margin-bottom: 30px; }
+            
+            /* ATS-Friendly Headers */
+            h1, h2, h3 {
+              margin-bottom: 16px;
+              page-break-after: avoid;
+              color: #111;
+            }
+            
+            h1 { 
+              font-size: 24px;
+              border-bottom: 2px solid #2563eb;
+              padding-bottom: 8px;
+            }
+            
+            h2 { 
+              font-size: 20px;
+              border-bottom: 1px solid #e5e7eb;
+              padding-bottom: 4px;
+            }
+            
+            /* Section Spacing */
+            .section {
+              margin-bottom: 24px;
+              page-break-inside: avoid;
+            }
+            
+            /* Job Titles */
+            .job-title {
+              font-weight: bold;
+              font-size: 16px;
+              color: #1f2937;
+              margin-bottom: 8px;
+            }
+            
+            /* Company Names */
+            .company {
+              font-weight: 500;
+              color: #4b5563;
+            }
+            
+            /* Dates */
+            .date {
+              color: #6b7280;
+              font-size: 14px;
+            }
+            
+            /* Bullet Points */
+            .achievements {
+              margin-top: 12px;
+              padding-left: 0;
+            }
+            
+            .achievement-item {
+              margin-bottom: 8px;
+              list-style-type: none;
+              padding-left: 24px;
+              position: relative;
+            }
+            
+            .achievement-item:before {
+              content: "•";
+              position: absolute;
+              left: 8px;
+              color: #2563eb;
+            }
+            
+            /* Skills Section */
+            .skills-grid {
+              display: grid;
+              grid-template-columns: repeat(2, 1fr);
+              gap: 16px;
+              margin-top: 12px;
+            }
+            
+            .skill-category {
+              font-weight: 500;
+              color: #1f2937;
+              margin-bottom: 4px;
+            }
+            
+            /* Contact Info */
+            .contact-info {
+              margin-bottom: 24px;
+              border-bottom: 1px solid #e5e7eb;
+              padding-bottom: 16px;
+              text-align: center;
+            }
+            
+            /* Metrics and Improvements */
+            .metrics {
+              margin-top: 32px;
+              padding-top: 16px;
+              border-top: 1px solid #e5e7eb;
+            }
+            
+            .metric-item {
+              margin-bottom: 8px;
+              display: flex;
+              justify-content: space-between;
+            }
+            
+            .metric-label {
+              font-weight: 500;
+              color: #4b5563;
+            }
+            
+            .metric-value {
+              color: #2563eb;
+              font-weight: bold;
+            }
+            
+            /* Page Breaks */
+            @page {
+              margin: 40px;
+            }
+            
+            /* Print Optimization */
+            @media print {
+              body {
+                margin: 0;
+                padding: 20px;
+              }
+              
+              .page-break {
+                page-break-before: always;
+              }
+            }
           </style>
         </head>
         <body>
-          <h1>Optimized Resume</h1>
-          <div class="content">${content}</div>
-          <h2>Improvements</h2>
-          <div class="improvements">
+          <div class="contact-info">
+            <h1>Optimized Professional Resume</h1>
+          </div>
+          
+          <div class="content">
+            ${content}
+          </div>
+          
+          <div class="metrics">
+            <h2>Performance Improvements</h2>
             ${(improvements as Improvement[]).map((imp: Improvement) => `
-              <div>
-                <strong>${imp.type}:</strong>
-                Before: ${imp.before}% → After: ${imp.after}%
+              <div class="metric-item">
+                <span class="metric-label">${imp.type}:</span>
+                <span class="metric-value">
+                  ${imp.before}% → ${imp.after}%
+                </span>
               </div>
             `).join("")}
           </div>
-          <h2>Key Changes</h2>
-          <div class="key-changes">
-            <ul>
-              ${(keyChanges as string[]).map((change: string) => `<li>${change}</li>`).join("")}
+          
+          <div class="section">
+            <h2>Optimization Summary</h2>
+            <ul class="achievements">
+              ${(keyChanges as string[]).map((change: string) => `
+                <li class="achievement-item">${change}</li>
+              `).join("")}
             </ul>
           </div>
         </body>
@@ -67,6 +201,15 @@ export default async function handler(
     const pdf = await page.pdf({
       format: "A4",
       margin: { top: "40px", right: "40px", bottom: "40px", left: "40px" },
+      printBackground: true,
+      displayHeaderFooter: true,
+      headerTemplate: '<div></div>',
+      footerTemplate: `
+        <div style="font-size: 8px; text-align: center; width: 100%;">
+          <span class="pageNumber"></span> / <span class="totalPages"></span>
+        </div>
+      `,
+      preferCSSPageSize: true
     });
 
     await browser.close();

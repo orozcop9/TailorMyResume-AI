@@ -58,7 +58,15 @@ export function OptimizeForm() {
         throw new Error(data.error || "Failed to optimize resume");
       }
 
-      router.push("/optimize/results");
+      router.push({
+        pathname: "/optimize/results",
+        query: { 
+          originalContent: encodeURIComponent(data.originalContent),
+          optimizedContent: encodeURIComponent(data.optimizedContent),
+          improvements: encodeURIComponent(JSON.stringify(data.improvements)),
+          keyChanges: encodeURIComponent(JSON.stringify(data.keyChanges))
+        }
+      });
     } catch (error) {
       toast({
         title: "Optimization Failed",

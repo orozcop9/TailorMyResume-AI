@@ -251,55 +251,47 @@ function optimizeSection(section: ResumeSection, jobDescription: string): string
 }
 
 function optimizeSummary(content: string, jobDescription: string): string {
-  // Keep existing content but enhance it
-  let optimized = content;
-  
-  // Extract key requirements from job description
-  const requirements = jobDescription.match(/(?:required|requirements|qualifications|seeking|must have).*?\n/gi) || [];
-  const keyRequirements = requirements
-    .map(req => req.replace(/^.*?:\s*/, '').trim())
-    .filter(req => req.length > 0);
-
-  // Add relevant experience highlights
-  if (keyRequirements.length > 0) {
-    const relevantExperience = keyRequirements
-      .slice(0, 2)
-      .map(req => req.toLowerCase())
-      .filter(req => !content.toLowerCase().includes(req));
-
-    if (relevantExperience.length > 0) {
-      optimized = optimized.trim() + '\nProficient in ' + relevantExperience.join(' and ') + '.';
+  // Preserve the original content structure
+  const lines = content.split('\n');
+  const optimizedLines = lines.map(line => {
+    // Only enhance existing content, don't generate new content
+    if (line.includes('seeking') || line.includes('objective')) {
+      const jobRequirements = extractKeywords(jobDescription)
+        .filter(keyword => !line.toLowerCase().includes(keyword.toLowerCase()))
+        .slice(0, 2);
+      
+      if (jobRequirements.length > 0) {
+        return line + ` with expertise in ${jobRequirements.join(' and ')}`;
+      }
     }
-  }
+    return line;
+  });
 
-  return optimized;
+  return optimizedLines.join('\n');
 }
 
 function optimizeExperience(content: string, jobDescription: string): string {
   const lines = content.split('\n');
   const jobKeywords = extractKeywords(jobDescription);
-  const quantifiableResults = /(\d+%|\$\d+|\d+ (users|customers|clients|projects|teams|people))/gi;
   
   const optimizedLines = lines.map(line => {
-    let optimizedLine = line;
-
-    // Preserve job titles and companies
-    if (line.match(/^[A-Z].*?(?:Inc\.|LLC|Ltd\.|Corp\.|Corporation|Company)/)) {
+    // Preserve headers and company names
+    if (line.match(/^[A-Z].*?(?:Inc\.|LLC|Ltd\.|Corp\.|Company|Technologies)/)) {
       return line;
     }
 
-    // Enhance bullet points
+    // Only enhance bullet points and descriptions
     if (line.match(/^[-•]|\w+ed|\w+ing/)) {
-      // Replace weak verbs with strong action verbs
+      let optimizedLine = line;
+
+      // Replace weak verbs with strong ones
       const actionVerbReplacements = {
-        'worked on': 'developed',
+        'worked': 'spearheaded',
         'helped': 'led',
-        'made': 'created',
+        'made': 'developed',
         'did': 'executed',
         'was responsible for': 'managed',
-        'handled': 'orchestrated',
-        'supported': 'drove',
-        'assisted': 'collaborated on'
+        'handled': 'orchestrated'
       };
 
       Object.entries(actionVerbReplacements).forEach(([weak, strong]) => {
@@ -309,26 +301,19 @@ function optimizeExperience(content: string, jobDescription: string): string {
         }
       });
 
-      // Add quantifiable results if missing
-      if (!optimizedLine.match(quantifiableResults)) {
-        const metrics = ['efficiency', 'productivity', 'user satisfaction', 'cost reduction'];
-        const randomMetric = metrics[Math.floor(Math.random() * metrics.length)];
-        if (!optimizedLine.includes('resulting in')) {
-          optimizedLine += ` resulting in 20% improvement in ${randomMetric}`;
-        }
-      }
-
-      // Add relevant job keywords
+      // Add relevant keywords if missing
       const missingKeywords = jobKeywords
         .filter(keyword => !optimizedLine.toLowerCase().includes(keyword.toLowerCase()))
         .slice(0, 1);
 
-      if (missingKeywords.length > 0) {
+      if (missingKeywords.length > 0 && !optimizedLine.includes('utilizing')) {
         optimizedLine = optimizedLine.trim() + ` utilizing ${missingKeywords[0]}`;
       }
+
+      return optimizedLine;
     }
 
-    return optimizedLine;
+    return line;
   });
 
   return optimizedLines.join('\n');
@@ -339,26 +324,12 @@ function optimizeSkills(content: string, jobDescription: string): string {
   const existingSkills = extractSkills(content);
   const missingSkills = jobSkills.filter(skill => !existingSkills.includes(skill));
 
-  // Keep original skills section
-  let optimized = content.trim();
+  // Keep original content
+  let optimized = content;
 
-  // Add missing relevant skills
+  // Add relevant missing skills
   if (missingSkills.length > 0) {
-    const skillsByCategory = {
-      technical: missingSkills.filter(skill => 
-        /^(javascript|python|java|react|angular|vue|node|aws|docker|kubernetes|git|sql)$/i.test(skill)
-      ),
-      soft: missingSkills.filter(skill => 
-        /^(leadership|communication|problem|analytical|teamwork|management)$/i.test(skill)
-      )
-    };
-
-    if (skillsByCategory.technical.length > 0) {
-      optimized += '\n\nTechnical Skills: ' + skillsByCategory.technical.join(', ');
-    }
-    if (skillsByCategory.soft.length > 0) {
-      optimized += '\n\nSoft Skills: ' + skillsByCategory.soft.join(', ');
-    }
+    optimized += '\n\nAdditional relevant skills: ' + missingSkills.join(', ');
   }
 
   return optimized;

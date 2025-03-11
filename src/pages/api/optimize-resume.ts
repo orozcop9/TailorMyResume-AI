@@ -115,112 +115,61 @@ async function extractTextFromFile(file: formidable.File): Promise<string> {
 }
 
 function findSectionBoundaries(content: string): ResumeSection[] {
-  const sectionPatterns = [
-    {
-      type: "summary" as const,
-      patterns: [
-        /^(?:professional\s+)?summary/i,
-        /^(?:career\s+)?objective/i,
-        /^profile/i,
-        /^about(?:\s+me)?/i,
-        /^overview/i
-      ]
-    },
-    {
-      type: "experience" as const,
-      patterns: [
-        /^(?:work\s+)?experience/i,
-        /^professional\s+experience/i,
-        /^employment(?:\s+history)?/i,
-        /^work\s+history/i,
-        /^career\s+history/i,
-        /^relevant experience/i
-      ]
-    },
-    {
-      type: "education" as const,
-      patterns: [
-        /^education(?:al)?(?:\s+background)?/i,
-        /^academic(?:\s+background)?/i,
-        /^qualifications/i,
-        /^degrees?/i,
-        /^academic history/i
-      ]
-    },
-    {
-      type: "skills" as const,
-      patterns: [
-        /^(?:technical\s+)?skills/i,
-        /^core\s+competencies/i,
-        /^expertise/i,
-        /^technologies/i,
-        /^proficiencies/i,
-        /^capabilities/i,
-        /^technical proficiencies/i,
-        /^key skills/i
-      ]
-    }
-  ];
-
-  const lines = content.split('\n');
   const sections: ResumeSection[] = [];
-  let currentType: ResumeSection["type"] = "other";
-  let currentTitle = "";
-  let currentContent: string[] = [];
+  const lines = content.split('\n');
+  let currentSection: ResumeSection | null = null;
+  let contentBuffer: string[] = [];
 
-  function identifySection(line: string): { type: ResumeSection["type"]; title: string } | null {
-    const trimmedLine = line.trim();
-    
-    for (const pattern of sectionPatterns) {
-      if (pattern.patterns.some(p => p.test(trimmedLine))) {
-        return {
-          type: pattern.type,
-          title: trimmedLine
-        };
-      }
-    }
+  // Enhanced section detection patterns
+  const sectionHeaders = {
+    summary: /^(?:PROFESSIONAL\s+)?SUMMARY|^OBJECTIVE|^PROFILE|^ABOUT/i,
+    experience: /^(?:PROFESSIONAL\s+)?EXPERIENCE|^EMPLOYMENT|^WORK\s+HISTORY/i,
+    education: /^EDUCATION|^ACADEMIC|^QUALIFICATIONS/i,
+    skills: /^(?:TECHNICAL\s+)?SKILLS|^COMPETENCIES|^EXPERTISE/i
+  };
 
-    if (trimmedLine && 
-        trimmedLine.length <= 50 && 
-        /^[A-Z]/.test(trimmedLine) && 
-        !trimmedLine.includes(":")) {
-      return {
-        type: "other",
-        title: trimmedLine
-      };
-    }
-
+  function identifySection(line: string): ResumeSection['type'] | null {
+    const cleanLine = line.trim().toUpperCase();
+    if (sectionHeaders.summary.test(cleanLine)) return 'summary';
+    if (sectionHeaders.experience.test(cleanLine)) return 'experience';
+    if (sectionHeaders.education.test(cleanLine)) return 'education';
+    if (sectionHeaders.skills.test(cleanLine)) return 'skills';
     return null;
   }
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
-    const sectionMatch = identifySection(line);
+    if (!line) continue;
 
-    if (sectionMatch) {
-      if (currentTitle) {
+    const sectionType = identifySection(line);
+    
+    if (sectionType) {
+      // Save previous section if exists
+      if (currentSection && contentBuffer.length > 0) {
         sections.push({
-          type: currentType,
-          title: currentType.charAt(0).toUpperCase() + currentType.slice(1),
-          originalTitle: currentTitle,
-          content: currentContent.join('\n').trim()
+          ...currentSection,
+          content: contentBuffer.join('\n')
         });
       }
 
-      currentType = sectionMatch.type;
-      currentTitle = sectionMatch.title;
-      currentContent = [];
-    } else if (line) {
-      currentContent.push(line);
+      // Start new section
+      currentSection = {
+        type: sectionType,
+        title: sectionType,
+        originalTitle: line,
+        content: ''
+      };
+      contentBuffer = [];
+    } else if (currentSection) {
+      contentBuffer.push(line);
     }
   }
 
-  if (currentTitle && currentContent.length > 0) {
+  // Add final section
+  if (currentSection && contentBuffer.length > 0) {
     sections.push({
-      type: currentType,
-      title: currentType.charAt(0).toUpperCase() + currentType.slice(1),
-      originalTitle: currentTitle,
-      content: currentContent.join('\n').trim()
+      ...currentSection,
+      content: contentBuffer.join('\n')
     });
   }
 
@@ -279,21 +228,21 @@ function optimizeExperience(content: string, jobDescription: string): string {
   const jobKeywords = extractKeywords(jobDescription);
   
   const optimizedLines = lines.map(line => {
-    // Preserve company names and dates
-    if (line.match(/^[A-Z].*?(?:Inc\.|LLC|Ltd\.|Corp\.|Company|Technologies|20\d{2})/)) {
+    // Skip headers and dates
+    if (line.match(/^[A-Z].*?(?:20\d{2}|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec))/i)) {
       return line;
     }
 
     // Enhance bullet points
-    if (line.match(/^[-•]|\w+ed|\w+ing/)) {
+    if (line.match(/^[-•]|^\s*[-•]|\w+ed|\w+ing/)) {
       let optimizedLine = line;
 
       // Replace weak verbs with strong ones
       const actionVerbReplacements = {
         'worked on': 'developed',
-        'helped with': 'led',
+        'helped': 'led',
         'assisted': 'managed',
-        'participated in': 'directed',
+        'participated in': 'spearheaded',
         'supported': 'drove',
         'contributed to': 'delivered',
         'responsible for': 'owned',
@@ -307,20 +256,15 @@ function optimizeExperience(content: string, jobDescription: string): string {
         }
       });
 
-      // Add quantifiable results if missing
-      if (!optimizedLine.match(/\d+%|\$|\d+ (users|customers|clients|projects)/i)) {
-        const metrics = ['efficiency', 'productivity', 'user satisfaction', 'cost savings'];
-        const randomMetric = metrics[Math.floor(Math.random() * metrics.length)];
-        optimizedLine += ` resulting in 25% improvement in ${randomMetric}`;
-      }
-
-      // Add relevant job keywords naturally
-      const missingKeywords = jobKeywords
+      // Add job-specific keywords naturally
+      const relevantKeywords = jobKeywords
         .filter(keyword => !optimizedLine.toLowerCase().includes(keyword.toLowerCase()))
         .slice(0, 1);
 
-      if (missingKeywords.length > 0) {
-        optimizedLine = optimizedLine.trim() + ` leveraging ${missingKeywords[0]}`;
+      if (relevantKeywords.length > 0) {
+        optimizedLine = optimizedLine.trim();
+        if (!optimizedLine.endsWith('.')) optimizedLine += '.';
+        optimizedLine += ` Leveraged expertise in ${relevantKeywords[0]}.`;
       }
 
       return optimizedLine;
